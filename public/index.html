@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Weekend Catchup</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div id="app">
+
+  <!-- HOLDING screen (session locked for new visitors) -->
+  <div id="screen-holding" class="screen">
+    <div class="card holding-screen">
+      <div class="emoji">☕</div>
+      <h2>A session is in progress</h2>
+      <p>The game is already underway. Grab a coffee and try again in a few minutes — the session resets automatically after the leaderboard is shown.</p>
+    </div>
+  </div>
+
+  <!-- PLAYER WAITING screen (waiting for host to confirm question) -->
+  <div id="screen-player-waiting" class="screen">
+    <div class="card holding-screen">
+      <div class="emoji">🎙️</div>
+      <h2>Getting things ready…</h2>
+      <p>The Host is setting up the session — we'll be with you in a moment!</p>
+      <p id="player-waiting-count" class="waiting-count"></p>
+    </div>
+  </div>
+
+  <!-- REGISTRATION screen -->
+  <div id="screen-registration" class="screen">
+    <div class="card">
+      <h1>Weekend Catchup</h1>
+      <p class="subtitle">Monday's friendliest game — share your weekend and guess everyone else's!</p>
+      <input type="text" id="input-name" placeholder="Your name…" maxlength="30" autocomplete="off" />
+      <div class="role-row">
+        <button class="role-btn" id="btn-role-host" onclick="selectRole('host')">
+          <span class="role-icon">🎙️</span>
+          <span class="role-label">Host</span>
+          <span class="role-note" id="host-note">Run the session</span>
+        </button>
+        <button class="role-btn selected" id="btn-role-player" onclick="selectRole('player')">
+          <span class="role-icon">👋</span>
+          <span class="role-label">Player</span>
+          <span class="role-note">Join and play</span>
+        </button>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="joinSession()">Join</button>
+    </div>
+    <div id="waiting-players-card" class="card" style="display:none">
+      <h3>Who's here</h3>
+      <ul class="player-list" id="reg-player-list"></ul>
+    </div>
+  </div>
+
+  <!-- QUESTION SETTING screen (host only) -->
+  <div id="screen-question-setting" class="screen">
+    <div class="card">
+      <h1>Set the Question</h1>
+      <p class="subtitle">This is what everyone will answer. Edit it or leave it as the default.</p>
+      <input type="text" id="input-question" maxlength="140" autocomplete="off" />
+      <button class="btn btn-primary btn-full" onclick="confirmQuestion()">Confirm Question →</button>
+    </div>
+  </div>
+
+  <!-- SUBMISSION screen -->
+  <div id="screen-submission" class="screen">
+    <div class="card" id="sub-form-card">
+      <h2 id="sub-question-text">What did you get up to this weekend?</h2>
+      <p>Be specific enough to be guessable — but not too obvious! 😄</p>
+      <input type="text" id="input-activity" placeholder="e.g. Tried making sourdough for the first time…" maxlength="140" autocomplete="off" />
+      <button class="btn btn-primary btn-full" onclick="submitActivity()">Submit</button>
+    </div>
+    <div class="card" id="sub-wait-card" style="display:none">
+      <h2>Submitted! ✅</h2>
+      <p id="sub-wait-msg">Waiting for everyone else…</p>
+    </div>
+    <!-- Host status panel -->
+    <div class="card" id="host-sub-panel" style="display:none">
+      <div>
+        <h3>Ready ✅</h3>
+        <ul class="player-list" id="host-ready-list"></ul>
+      </div>
+      <div class="divider"></div>
+      <div>
+        <h3>Not yet submitted ⏳</h3>
+        <ul class="player-list" id="host-waiting-list"></ul>
+      </div>
+      <div class="mt-16">
+        <button class="btn btn-teal btn-full" onclick="startGame()">Start Game →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- VOTING screen -->
+  <div id="screen-voting" class="screen">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span class="counter-badge" id="round-counter">Round 1 of 1</span>
+        <span class="counter-badge" id="vote-counter">0 of 0 voted</span>
+      </div>
+      <h2 style="margin-bottom:4px;">Whose weekend was this?</h2>
+      <p class="mb-8">Pick who you think did this:</p>
+      <div class="activity-box" id="vote-activity-text"></div>
+      <div class="timer-wrap">
+        <div class="timer-bar-bg"><div class="timer-bar" id="timer-bar"></div></div>
+        <div class="timer-number" id="timer-number">45</div>
+      </div>
+      <div class="vote-grid" id="vote-grid"></div>
+      <div id="voted-msg" style="display:none;margin-top:16px;text-align:center;color:var(--accent2);font-weight:600;">Vote recorded! Waiting for others…</div>
+      <div id="vote-host-controls" class="host-controls" style="display:none">
+        <button class="btn btn-secondary btn-sm" onclick="hostNext()">Next →</button>
+        <button class="btn btn-danger btn-sm" onclick="endGamePrompt('vote')">End Game</button>
+      </div>
+      <div class="confirm-bar" id="end-confirm-bar-vote">
+        <span>End game for everyone?</span>
+        <button class="btn btn-danger btn-sm" onclick="confirmEndGame()">Confirm</button>
+        <button class="btn btn-secondary btn-sm" onclick="cancelEndGame('vote')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- REVEAL screen -->
+  <div id="screen-reveal" class="screen">
+    <div class="card">
+      <span class="counter-badge" id="reveal-round-label">Round 1 of 1</span>
+      <h2 class="mt-8">It was…</h2>
+      <div class="activity-box" id="reveal-activity-text"></div>
+      <div style="text-align:center;margin-bottom:20px;">
+        <span style="font-size:1.5rem;font-weight:700;color:var(--accent);" id="reveal-owner-name"></span>
+      </div>
+      <div class="reveal-section">
+        <div class="reveal-label correct">✅ Correct (+1 pt)</div>
+        <div class="reveal-list" id="reveal-correct"></div>
+      </div>
+      <div class="reveal-section">
+        <div class="reveal-label wrong">❌ Wrong</div>
+        <div class="reveal-list" id="reveal-wrong"></div>
+      </div>
+      <div class="reveal-section">
+        <div class="reveal-label novote">— Did not vote</div>
+        <div class="reveal-list" id="reveal-novote"></div>
+      </div>
+      <!-- Shared countdown (all clients see this) -->
+      <div class="reveal-countdown-wrap">
+        <div id="reveal-paused-msg" class="paused-msg" style="display:none;">Host has paused ⏸</div>
+        <div id="reveal-timer-number" class="reveal-timer">15</div>
+        <div class="reveal-timer-label">seconds until next round</div>
+      </div>
+      <!-- Host-only controls -->
+      <div id="reveal-host-controls" class="host-controls" style="display:none">
+        <button class="btn btn-secondary btn-sm" id="btn-pause-reveal" onclick="pauseReveal()">Pause ⏸</button>
+        <button class="btn btn-secondary btn-sm" id="btn-resume-reveal" onclick="resumeReveal()" style="display:none">Resume ▶</button>
+        <button class="btn btn-secondary btn-sm" onclick="skipReveal()">Skip →</button>
+        <button class="btn btn-danger btn-sm" onclick="endGamePrompt('reveal')">End Game</button>
+      </div>
+      <div class="confirm-bar" id="end-confirm-bar-reveal">
+        <span>End game for everyone?</span>
+        <button class="btn btn-danger btn-sm" onclick="confirmEndGame()">Confirm</button>
+        <button class="btn btn-secondary btn-sm" onclick="cancelEndGame('reveal')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BETWEEN ROUNDS screen -->
+  <div id="screen-between" class="screen">
+    <div class="card between-rounds">
+      <div class="ready-text">Are you ready for the next one?</div>
+      <div class="big-countdown" id="between-countdown">3</div>
+      <div id="between-host-controls" style="display:none;margin-top:16px;">
+        <button class="btn btn-secondary btn-sm" onclick="skipCountdown()">Skip →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEADERBOARD screen -->
+  <div id="screen-leaderboard" class="screen">
+    <div class="card">
+      <h1 style="margin-bottom:4px;">Final Scores 🏆</h1>
+      <p class="subtitle" id="lb-subtitle">Here's how everyone did!</p>
+      <div class="leaderboard-list" id="leaderboard-list"></div>
+    </div>
+    <p style="text-align:center;color:var(--text-muted);font-size:0.85rem;margin-top:12px;">The session resets automatically in 60 seconds.</p>
+  </div>
+
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
