@@ -1,18 +1,10 @@
 /* ── localStorage helpers ────────────────────────────────────────────────── */
 const LS_KEY = 'catchup_session';
 
-function saveSession(data) {
-  try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch (_) {}
-}
-function loadSession() {
-  try { return JSON.parse(localStorage.getItem(LS_KEY)); } catch (_) { return null; }
-}
-function clearSession() {
-  try { localStorage.removeItem(LS_KEY); } catch (_) {}
-}
-function generateToken() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2);
-}
+function saveSession(data) { try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch (_) {} }
+function loadSession()     { try { return JSON.parse(localStorage.getItem(LS_KEY)); } catch (_) { return null; } }
+function clearSession()    { try { localStorage.removeItem(LS_KEY); } catch (_) {} }
+function generateToken()   { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 
 /* ── App state ───────────────────────────────────────────────────────────── */
 const socket = io();
@@ -23,13 +15,12 @@ let isHost = false;
 let hasVoted = false;
 let hostTaken = false;
 let sessionPhase = 'registration';
-let confirmedQuestion = 'What did you get up to this weekend?';
+let confirmedQuestion = '';
 
 let timerInterval = null;
 let revealTimerInterval = null;
 let betweenInterval = null;
 
-// Reconnection flow: suppress processInit until we know if reconnect succeeded
 let reconnecting = false;
 let pendingInitData = null;
 
@@ -56,9 +47,19 @@ function joinSession() {
   socket.emit('join', { name, role: myRole, token: generateToken() });
 }
 
-/* ── Question setting (host only) ────────────────────────────────────────── */
+/* ── Question setting ────────────────────────────────────────────────────── */
+function useSuggestion(btn) {
+  const input = document.getElementById('input-question');
+  input.value = btn.textContent;
+  input.focus();
+}
+
 function confirmQuestion() {
   const q = document.getElementById('input-question').value.trim();
+  if (!q) {
+    document.getElementById('input-question').focus();
+    return;
+  }
   socket.emit('confirm_question', { question: q });
 }
 
@@ -70,9 +71,7 @@ function submitActivity() {
   document.getElementById('sub-wait-card').style.display = 'block';
 }
 
-function startGame() {
-  socket.emit('start_game');
-}
+function startGame() { socket.emit('start_game'); }
 
 /* ── Voting ──────────────────────────────────────────────────────────────── */
 function vote(votedForId) {
@@ -86,13 +85,11 @@ function vote(votedForId) {
   document.getElementById('voted-msg').style.display = 'block';
 }
 
-function hostNext() { socket.emit('next_round'); }
-function skipCountdown() { socket.emit('skip_countdown'); }
-
-/* ── Reveal controls ─────────────────────────────────────────────────────── */
-function pauseReveal()  { socket.emit('pause_reveal');  }
-function resumeReveal() { socket.emit('resume_reveal'); }
-function skipReveal()   { socket.emit('skip_reveal');   }
+function hostNext()       { socket.emit('next_round'); }
+function skipCountdown()  { socket.emit('skip_countdown'); }
+function pauseReveal()    { socket.emit('pause_reveal'); }
+function resumeReveal()   { socket.emit('resume_reveal'); }
+function skipReveal()     { socket.emit('skip_reveal'); }
 
 /* ── End game confirm ────────────────────────────────────────────────────── */
 function endGamePrompt(ctx) {
@@ -104,6 +101,11 @@ function cancelEndGame(ctx) {
   document.getElementById('end-confirm-bar-' + ctx).classList.remove('visible');
 }
 function confirmEndGame() { socket.emit('end_game'); }
+
+/* ── Host reset (leaderboard) ────────────────────────────────────────────── */
+function hostResetPrompt()  { document.getElementById('reset-confirm-bar').classList.add('visible'); }
+function cancelHostReset()  { document.getElementById('reset-confirm-bar').classList.remove('visible'); }
+function confirmHostReset() { socket.emit('reset_session'); }
 
 /* ── Voting timer ────────────────────────────────────────────────────────── */
 function startTimer(timerEnd) {
@@ -174,11 +176,12 @@ function renderPlayerChip(p, dotClass) {
 function renderVoteGrid(players, alreadyVoted) {
   const grid = document.getElementById('vote-grid');
   grid.innerHTML = '';
+  // All players are always shown — no elimination as rounds progress
   players.forEach(p => {
     const btn = document.createElement('button');
     btn.className = 'vote-btn';
     btn.textContent = p.name;
-    btn.dataset.id = p.id;
+    btn.dataset.id = p.id; // stable token
     if (alreadyVoted) btn.disabled = true;
     btn.onclick = () => vote(p.id);
     grid.appendChild(btn);
@@ -195,23 +198,27 @@ function renderRevealList(listId, items, chipClass) {
   el.innerHTML = items.map(p => `<span class="reveal-chip ${chipClass}">${p.name}</span>`).join('');
 }
 
-function renderLeaderboard(ranked, noSubmissions) {
+function renderLeaderboard(ranked, noSubmissions, hostToken) {
   const list = document.getElementById('leaderboard-list');
   const subtitle = document.getElementById('lb-subtitle');
   if (noSubmissions) {
-    subtitle.textContent = "Looks like everyone had a quiet weekend — nothing to guess!";
+    subtitle.textContent = "Looks like everyone had a quiet one — nothing to guess!";
     list.innerHTML = '';
-    return;
+  } else {
+    subtitle.textContent = "Here's how everyone did!";
+    list.innerHTML = ranked.map(p => {
+      const isFirst = p.rank === 1;
+      return `<div class="lb-row">
+        <span class="lb-rank ${isFirst ? 'first' : ''}">${isFirst ? '🥇' : p.rank}</span>
+        <span class="lb-name">${p.name}</span>
+        <span class="lb-score">${p.score} <span class="lb-pts">pts</span></span>
+      </div>`;
+    }).join('');
   }
-  subtitle.textContent = "Here's how everyone did!";
-  list.innerHTML = ranked.map(p => {
-    const isFirst = p.rank === 1;
-    return `<div class="lb-row">
-      <span class="lb-rank ${isFirst ? 'first' : ''}">${isFirst ? '🥇' : p.rank}</span>
-      <span class="lb-name">${p.name}</span>
-      <span class="lb-score">${p.score} <span class="lb-pts">pts</span></span>
-    </div>`;
-  }).join('');
+  // Show host reset button only to the host
+  const hostCtrl = document.getElementById('leaderboard-host-controls');
+  if (hostCtrl) hostCtrl.style.display = isHost ? 'block' : 'none';
+  document.getElementById('reset-confirm-bar').classList.remove('visible');
 }
 
 function renderHostSubPanel(submitted, waiting) {
@@ -222,29 +229,37 @@ function renderHostSubPanel(submitted, waiting) {
   waitList.innerHTML  = '';
   if (submitted.length === 0) {
     readyList.innerHTML = '<li class="player-chip" style="color:var(--text-muted);font-style:italic;">None yet</li>';
-  } else {
-    submitted.forEach(p => readyList.appendChild(renderPlayerChip(p, 'ready')));
-  }
+  } else submitted.forEach(p => readyList.appendChild(renderPlayerChip(p, 'ready')));
   if (waiting.length === 0) {
     waitList.innerHTML = '<li class="player-chip" style="color:var(--text-muted);font-style:italic;">None yet</li>';
-  } else {
-    waiting.forEach(p => waitList.appendChild(renderPlayerChip(p, 'waiting')));
-  }
+  } else waiting.forEach(p => waitList.appendChild(renderPlayerChip(p, 'waiting')));
 }
 
 /* ── Screen setups ───────────────────────────────────────────────────────── */
 function showSubmissionScreen(alreadySubmitted) {
   sessionPhase = 'submission';
   showScreen('submission');
-  document.getElementById('sub-question-text').textContent = confirmedQuestion;
-  if (alreadySubmitted) {
-    document.getElementById('sub-form-card').style.display = 'none';
-    document.getElementById('sub-wait-card').style.display = 'block';
-  } else {
-    document.getElementById('sub-form-card').style.display = 'block';
-    document.getElementById('sub-wait-card').style.display = 'none';
-  }
+  document.getElementById('sub-question-text').textContent = confirmedQuestion || 'Your question';
+  document.getElementById('sub-form-card').style.display = alreadySubmitted ? 'none' : 'block';
+  document.getElementById('sub-wait-card').style.display = alreadySubmitted ? 'block' : 'none';
   document.getElementById('host-sub-panel').style.display = isHost ? 'block' : 'none';
+}
+
+function showVotingScreen(data) {
+  sessionPhase = 'voting';
+  showScreen('voting');
+  document.getElementById('round-counter').textContent =
+    `Round ${data.roundIndex + 1} of ${data.totalRounds}`;
+  document.getElementById('vote-counter').textContent =
+    `${data.votedCount || 0} of ${data.players.length} voted`;
+  document.getElementById('vote-question-context').textContent =
+    confirmedQuestion ? `Question: ${confirmedQuestion}` : '';
+  document.getElementById('vote-activity-text').textContent = `"${data.activityText}"`;
+  document.getElementById('voted-msg').style.display = hasVoted ? 'block' : 'none';
+  document.getElementById('end-confirm-bar-vote').classList.remove('visible');
+  document.getElementById('vote-host-controls').style.display = isHost ? 'flex' : 'none';
+  renderVoteGrid(data.players, hasVoted);
+  startTimer(data.timerEnd);
 }
 
 function showRevealScreen(data) {
@@ -253,14 +268,15 @@ function showRevealScreen(data) {
   showScreen('reveal');
   document.getElementById('reveal-round-label').textContent =
     `Round ${data.roundIndex + 1} of ${data.totalRounds}`;
+  document.getElementById('reveal-question-context').textContent =
+    confirmedQuestion ? `Question: ${confirmedQuestion}` : '';
   document.getElementById('reveal-activity-text').textContent = `"${data.activityText}"`;
   document.getElementById('reveal-owner-name').textContent = data.ownerName;
   document.getElementById('end-confirm-bar-reveal').classList.remove('visible');
-  renderRevealList('reveal-correct', data.correct,  'correct');
-  renderRevealList('reveal-wrong',   data.wrong,    'wrong');
-  renderRevealList('reveal-novote',  data.noVote,   'novote');
-  const hostCtrl = document.getElementById('reveal-host-controls');
-  hostCtrl.style.display = isHost ? 'flex' : 'none';
+  renderRevealList('reveal-correct', data.correct, 'correct');
+  renderRevealList('reveal-wrong',   data.wrong,   'wrong');
+  renderRevealList('reveal-novote',  data.noVote,  'novote');
+  document.getElementById('reveal-host-controls').style.display = isHost ? 'flex' : 'none';
 }
 
 function resetRevealHostButtons() {
@@ -268,7 +284,15 @@ function resetRevealHostButtons() {
   document.getElementById('btn-resume-reveal').style.display = 'none';
 }
 
-/* ── Socket: connect — attempt reconnection before anything else ─────────── */
+/* ── Host-disconnect banner ──────────────────────────────────────────────── */
+function showHostDisconnectBanner() {
+  document.getElementById('host-disconnect-banner').style.display = 'block';
+}
+function hideHostDisconnectBanner() {
+  document.getElementById('host-disconnect-banner').style.display = 'none';
+}
+
+/* ── Socket: connect ─────────────────────────────────────────────────────── */
 socket.on('connect', () => {
   const saved = loadSession();
   if (saved && saved.token && saved.sessionId) {
@@ -280,7 +304,8 @@ socket.on('connect', () => {
 /* ── Socket: init ────────────────────────────────────────────────────────── */
 socket.on('init', (data) => {
   pendingInitData = data;
-  if (reconnecting) return; // wait for reconnect result
+  if (data.hostDisconnecting) showHostDisconnectBanner();
+  if (reconnecting) return;
   processInit(data);
 });
 
@@ -298,25 +323,22 @@ function processInit(data) {
 }
 
 /* ── Socket: reconnect ───────────────────────────────────────────────────── */
-socket.on('reconnect_success', (data) => {
-  reconnecting = false;
-
-  myName   = data.name;
-  myRole   = data.role;
-  isHost   = data.isHost;
-  sessionPhase = data.phase;
+function applyFullState(data) {
+  myName        = data.name;
+  myRole        = data.role;
+  isHost        = data.isHost;
+  sessionPhase  = data.phase;
   if (data.question) confirmedQuestion = data.question;
 
-  // Update stored session ID (may have changed)
   const saved = loadSession();
-  if (saved) saveSession({ ...saved, sessionId: data.sessionId });
+  if (saved) saveSession({ ...saved, sessionId: data.sessionId, role: data.role });
 
   const phase = data.phase;
 
   if (phase === 'registration' || phase === 'question-setting') {
     if (isHost) {
-      document.getElementById('input-question').value =
-        data.question || 'What did you get up to this weekend?';
+      const inp = document.getElementById('input-question');
+      if (inp && !inp.value) inp.value = data.question || '';
       showScreen('question-setting');
     } else {
       updatePlayerWaitingCount(data.players);
@@ -324,7 +346,6 @@ socket.on('reconnect_success', (data) => {
     }
     return;
   }
-
   if (phase === 'submission') {
     showSubmissionScreen(data.submitted);
     if (isHost && data.players) {
@@ -335,23 +356,11 @@ socket.on('reconnect_success', (data) => {
     }
     return;
   }
-
   if (phase === 'voting') {
     hasVoted = data.hasVoted || false;
-    showScreen('voting');
-    document.getElementById('round-counter').textContent =
-      `Round ${data.roundIndex + 1} of ${data.totalRounds}`;
-    document.getElementById('vote-counter').textContent =
-      `${data.votedCount} of ${data.players.length} voted`;
-    document.getElementById('vote-activity-text').textContent = `"${data.activityText}"`;
-    document.getElementById('voted-msg').style.display = hasVoted ? 'block' : 'none';
-    document.getElementById('end-confirm-bar-vote').classList.remove('visible');
-    document.getElementById('vote-host-controls').style.display = isHost ? 'flex' : 'none';
-    renderVoteGrid(data.players, hasVoted);
-    startTimer(data.timerEnd);
+    showVotingScreen(data);
     return;
   }
-
   if (phase === 'reveal') {
     showRevealScreen(data);
     if (data.revealPaused) {
@@ -366,22 +375,23 @@ socket.on('reconnect_success', (data) => {
     }
     return;
   }
-
   if (phase === 'between') {
     showScreen('between');
     document.getElementById('between-host-controls').style.display = isHost ? 'block' : 'none';
     startBetweenCountdown();
     return;
   }
-
   if (phase === 'leaderboard') {
     showScreen('leaderboard');
     renderLeaderboard(data.ranked, data.noSubmissions);
     return;
   }
-
-  // Fallback
   showScreen('registration');
+}
+
+socket.on('reconnect_success', (data) => {
+  reconnecting = false;
+  applyFullState(data);
 });
 
 socket.on('reconnect_failed', () => {
@@ -407,6 +417,49 @@ socket.on('session_reset', ({ oldSessionId }) => {
   location.reload();
 });
 
+/* ── Host disconnect / promotion ─────────────────────────────────────────── */
+socket.on('host_disconnecting', () => {
+  showHostDisconnectBanner();
+});
+
+socket.on('host_reconnected', () => {
+  hideHostDisconnectBanner();
+});
+
+socket.on('host_changed', ({ newHostName }) => {
+  hideHostDisconnectBanner();
+  // Light, non-blocking toast via banner re-use
+  const banner = document.getElementById('host-disconnect-banner');
+  banner.textContent = `${newHostName} is now the Host`;
+  banner.style.background = 'var(--accent2)';
+  banner.style.color = '#1a2e35';
+  banner.style.display = 'block';
+  setTimeout(() => {
+    banner.style.display = 'none';
+    banner.textContent = 'Host disconnected — reassigning…';
+    banner.style.background = '';
+    banner.style.color = '';
+  }, 3500);
+});
+
+socket.on('promoted_to_host', (data) => {
+  hideHostDisconnectBanner();
+  // Treat as a full state restore — same machinery as reconnect_success
+  applyFullState(data);
+  // Brief notification
+  const banner = document.getElementById('host-disconnect-banner');
+  banner.textContent = "You're now the Host";
+  banner.style.background = 'var(--accent)';
+  banner.style.color = '#1a2e35';
+  banner.style.display = 'block';
+  setTimeout(() => {
+    banner.style.display = 'none';
+    banner.textContent = 'Host disconnected — reassigning…';
+    banner.style.background = '';
+    banner.style.color = '';
+  }, 3500);
+});
+
 /* ── Socket: joined ──────────────────────────────────────────────────────── */
 socket.on('joined', ({ role, name, sessionId, token, phase, question, questionConfirmed }) => {
   isHost   = role === 'host';
@@ -419,15 +472,12 @@ socket.on('joined', ({ role, name, sessionId, token, phase, question, questionCo
   if (questionConfirmed && question) confirmedQuestion = question;
 
   if (role === 'host') {
-    document.getElementById('input-question').value =
-      question || 'What did you get up to this weekend?';
+    const inp = document.getElementById('input-question');
+    if (inp && !inp.value) inp.value = question || '';
     showScreen('question-setting');
   } else {
-    if (questionConfirmed) {
-      showSubmissionScreen(false);
-    } else {
-      showScreen('player-waiting');
-    }
+    if (questionConfirmed) showSubmissionScreen(false);
+    else                   showScreen('player-waiting');
   }
 });
 
@@ -436,7 +486,6 @@ socket.on('lobby_update', ({ players, hostTaken: ht, phase }) => {
   hostTaken = ht;
   updateHostButton(ht);
   if (phase === 'registration') renderRegPlayers(players);
-  // Keep player-waiting count fresh
   if (!isHost) updatePlayerWaitingCount(players);
 });
 
@@ -459,18 +508,10 @@ socket.on('submission_update', ({ players, submitted, waiting }) => {
 });
 
 /* ── Socket: voting ──────────────────────────────────────────────────────── */
-socket.on('voting_round', ({ roundIndex, totalRounds, activityText, players, timerEnd }) => {
-  sessionPhase = 'voting';
+socket.on('voting_round', (data) => {
   hasVoted = false;
-  showScreen('voting');
-  document.getElementById('round-counter').textContent = `Round ${roundIndex + 1} of ${totalRounds}`;
-  document.getElementById('vote-counter').textContent  = `0 of ${players.length} voted`;
-  document.getElementById('vote-activity-text').textContent = `"${activityText}"`;
-  document.getElementById('voted-msg').style.display = 'none';
-  document.getElementById('end-confirm-bar-vote').classList.remove('visible');
-  document.getElementById('vote-host-controls').style.display = isHost ? 'flex' : 'none';
-  renderVoteGrid(players, false);
-  startTimer(timerEnd);
+  if (data.question) confirmedQuestion = data.question;
+  showVotingScreen({ ...data, votedCount: 0 });
 });
 
 socket.on('vote_update', ({ votedCount, total }) => {
@@ -479,6 +520,7 @@ socket.on('vote_update', ({ votedCount, total }) => {
 
 /* ── Socket: reveal ──────────────────────────────────────────────────────── */
 socket.on('reveal', (data) => {
+  if (data.question) confirmedQuestion = data.question;
   showRevealScreen(data);
   startRevealTimer(data.revealTimerEnd);
   if (isHost) resetRevealHostButtons();

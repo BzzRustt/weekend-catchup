@@ -3,37 +3,961 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Weekend Catchup</title>
-  <link rel="stylesheet" href="style.css" />
+  <title>Team Catchup</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@300;400;500;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    /* ── Tokens ───────────────────────────────────────────────────────── */
+    :root {
+      --bg: #0e0e10;
+      --surface: #18181c;
+      --surface2: #222228;
+      --border: rgba(255,255,255,0.07);
+      --accent:  #7c6dfa;
+      --accent2: #fa6d9a;
+      --accent3: #6dfabc;
+      --text:    #f0eff8;
+      --muted:   #7a7990;
+      --host:    #fa9f6d;
+      --radius:    16px;
+      --radius-sm: 10px;
+    }
+
+    /* ── Reset / base ─────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      font-family: 'Bricolage Grotesque', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      letter-spacing: -0.01em;
+    }
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 24px 16px 64px;
+      min-height: 100vh;
+    }
+
+    #app { width: 100%; max-width: 620px; }
+
+    .screen { display: none; }
+    .screen.active { display: block; animation: fadeUp 0.3s ease; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%      { opacity: 0.35; transform: scale(0.65); }
+    }
+
+    /* ── Card ─────────────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      margin-bottom: 14px;
+    }
+    .card-nested {
+      background: var(--surface2);
+      border-radius: var(--radius-sm);
+      padding: 14px 16px;
+    }
+
+    /* ── Typography ───────────────────────────────────────────────────── */
+    h1 {
+      font-size: 38px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      color: var(--text);
+      margin-bottom: 12px;
+    }
+    h1 .accent { color: var(--accent); }
+    h2 {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 10px;
+    }
+    h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 12px;
+    }
+    p { color: var(--muted); font-size: 15px; line-height: 1.65; margin-bottom: 8px; }
+    .subtitle { font-size: 15px; color: var(--muted); margin-bottom: 22px; }
+    .mono { font-family: 'DM Mono', monospace; }
+
+    .eyebrow {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 10px;
+    }
+
+    /* ── Wordmark ─────────────────────────────────────────────────────── */
+    .wordmark {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+    .wordmark-logo {
+      width: 42px; height: 42px;
+      border-radius: 13px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+    }
+    .wordmark-text {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    /* ── Role tag pills ───────────────────────────────────────────────── */
+    .role-tag {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border-radius: 100px;
+      margin-bottom: 16px;
+    }
+    .role-tag.host-only { background: rgba(250,159,109,0.15); color: var(--host); }
+    .role-tag.players   { background: rgba(124,109,250,0.15); color: var(--accent); }
+    .role-tag.everyone  { background: rgba(109,250,188,0.15); color: var(--accent3); }
+
+    /* ── Inputs ───────────────────────────────────────────────────────── */
+    input[type="text"] {
+      width: 100%;
+      background: var(--surface2);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 16px;
+      font-size: 15px;
+      font-family: inherit;
+      color: var(--text);
+      margin-bottom: 16px;
+      outline: none;
+      transition: border-color 0.18s;
+    }
+    input[type="text"]:focus  { border-color: var(--accent); }
+    input[type="text"]::placeholder { color: var(--muted); }
+
+    /* ── Buttons ──────────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-family: 'Bricolage Grotesque', system-ui, sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      cursor: pointer;
+      transition: all 0.18s ease;
+    }
+    .btn:active { transform: scale(0.98); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: #6a5de8; }
+
+    .btn-host { background: var(--host); color: #0e0e10; }
+    .btn-host:hover:not(:disabled) { background: #f08c58; }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--muted);
+      border: 1.5px solid var(--border);
+    }
+    .btn-ghost:hover:not(:disabled) {
+      color: var(--text);
+      border-color: rgba(255,255,255,0.18);
+    }
+
+    .btn-danger {
+      background: rgba(250,80,80,0.1);
+      color: #fa5050;
+      border: 1.5px solid rgba(250,80,80,0.28);
+    }
+    .btn-danger:hover:not(:disabled) { background: rgba(250,80,80,0.16); }
+
+    .btn-full { width: 100%; }
+    .btn-sm   { width: auto; padding: 8px 18px; font-size: 13px; }
+
+    /* ── Role selection cards (registration) ──────────────────────────── */
+    .role-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .role-btn {
+      background: var(--surface2);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 20px 16px;
+      cursor: pointer;
+      text-align: left;
+      transition: border-color 0.18s, background 0.18s, box-shadow 0.18s;
+      color: var(--text);
+      font-family: inherit;
+    }
+    .role-btn .role-icon  { display: block; font-size: 28px; margin-bottom: 10px; line-height: 1; }
+    .role-btn .role-label { display: block; font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+    .role-btn .role-note  { display: block; font-size: 12px; color: var(--muted); font-weight: 400; }
+
+    #btn-role-host .role-label   { color: var(--host); }
+    #btn-role-host:hover:not(:disabled) {
+      border-color: var(--host);
+      box-shadow: 0 0 0 4px rgba(250,159,109,0.08);
+    }
+    #btn-role-player .role-label { color: var(--accent); }
+    #btn-role-player:hover:not(:disabled) {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px rgba(124,109,250,0.08);
+    }
+
+    .role-btn.selected {
+      border-color: var(--accent);
+      background: rgba(124,109,250,0.08);
+    }
+    #btn-role-host.selected {
+      border-color: var(--host);
+      background: rgba(250,159,109,0.08);
+    }
+    .role-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .role-note-below {
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+      margin-top: 4px;
+    }
+
+    /* ── Suggestion chips (question setting) ──────────────────────────── */
+    .question-suggestions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 4px 0 20px;
+    }
+    .suggestion-chip {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      padding: 6px 13px;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.18s;
+      text-align: left;
+    }
+    .suggestion-chip:hover {
+      background: rgba(124,109,250,0.15);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .suggestion-chip:active { transform: scale(0.97); }
+
+    /* ── Info notices ─────────────────────────────────────────────────── */
+    .info-notice {
+      background: rgba(124,109,250,0.07);
+      border: 1px solid rgba(124,109,250,0.18);
+      color: var(--accent);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 18px;
+    }
+    .info-notice.success {
+      background: rgba(109,250,188,0.07);
+      border-color: rgba(109,250,188,0.18);
+      color: var(--accent3);
+    }
+
+    /* ── Player list (chips) ──────────────────────────────────────────── */
+    .player-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .player-chip {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 11px 15px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .player-chip .dot {
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    /* rotating colored avatar tiles when no status class */
+    .player-chip:nth-child(4n+1) .dot:not(.ready):not(.waiting) { background: rgba(124,109,250,0.18); color: var(--accent); }
+    .player-chip:nth-child(4n+2) .dot:not(.ready):not(.waiting) { background: rgba(250,109,154,0.18); color: var(--accent2); }
+    .player-chip:nth-child(4n+3) .dot:not(.ready):not(.waiting) { background: rgba(109,250,188,0.18); color: var(--accent3); }
+    .player-chip:nth-child(4n+4) .dot:not(.ready):not(.waiting) { background: rgba(250,159,109,0.18); color: var(--host); }
+
+    .player-chip .dot.ready   { background: rgba(109,250,188,0.18); color: var(--accent3); }
+    .player-chip .dot.ready::before  { content: '✓'; }
+    .player-chip .dot.waiting { background: rgba(122,121,144,0.15); color: var(--muted); }
+    .player-chip .dot.waiting::before { content: '⌛'; font-size: 13px; }
+
+    .player-chip .host-badge {
+      margin-left: auto;
+      background: rgba(250,159,109,0.15);
+      color: var(--host);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 100px;
+    }
+
+    /* Italic muted placeholder rows ("None yet") */
+    .player-chip[style*="italic"] {
+      background: transparent;
+      border-style: dashed;
+      border-color: rgba(255,255,255,0.05);
+    }
+
+    /* Color names of submitted players in green */
+    .player-chip:has(.dot.ready) > span:not(.dot):not(.host-badge) {
+      color: var(--accent3);
+    }
+
+    /* ── Section labels (Ready / Not yet submitted) ───────────────────── */
+    .section-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+    .section-label.submitted { color: var(--accent3); }
+    .section-label .count {
+      font-weight: 500;
+    }
+
+    .divider { height: 1px; background: var(--border); margin: 18px 0; }
+
+    /* ── Host controls area ───────────────────────────────────────────── */
+    .host-controls-area {
+      background: rgba(250,159,109,0.05);
+      border: 1px solid rgba(250,159,109,0.14);
+      border-radius: var(--radius-sm);
+      padding: 14px 16px;
+      margin-top: 18px;
+    }
+    .host-controls-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--host);
+      margin-bottom: 10px;
+    }
+
+    /* ── You're host badge ────────────────────────────────────────────── */
+    .header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .youre-host {
+      background: rgba(250,159,109,0.15);
+      color: var(--host);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 100px;
+      white-space: nowrap;
+    }
+
+    /* ── Question display (submission) ────────────────────────────────── */
+    .question-text {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--accent);
+      font-style: italic;
+      letter-spacing: -0.01em;
+      margin-bottom: 16px;
+    }
+    .confirmed-question {
+      font-size: 14px;
+      color: var(--accent);
+      font-style: italic;
+      margin-bottom: 18px;
+    }
+    .confirmed-question:empty { display: none; }
+    .section-label .count:empty { display: none; }
+
+    /* ── Counter / question context (voting + reveal) ─────────────────── */
+    .counter-badge {
+      display: inline-block;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      padding: 4px 10px;
+      border-radius: 100px;
+    }
+    .question-context {
+      font-size: 13px;
+      color: var(--muted);
+      font-style: italic;
+      margin: 10px 0 14px;
+    }
+
+    /* ── Voting screen header row ─────────────────────────────────────── */
+    .vote-meta-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    /* ── Activity card (the answer text being voted on) ───────────────── */
+    .activity-box {
+      background: var(--surface2);
+      border-radius: var(--radius);
+      padding: 22px 20px;
+      font-size: 17px;
+      font-style: italic;
+      text-align: center;
+      color: var(--accent2);
+      border-left: 3px solid var(--accent2);
+      margin-bottom: 20px;
+      font-weight: 500;
+    }
+
+    /* ── Timer ────────────────────────────────────────────────────────── */
+    .timer-wrap {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin: 16px 0 20px;
+    }
+    .timer-bar-bg {
+      flex: 1;
+      height: 6px;
+      background: var(--surface2);
+      border-radius: 100px;
+      overflow: hidden;
+    }
+    .timer-bar {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 100px;
+      transition: width 0.6s linear, background 0.6s;
+    }
+    .timer-bar.low { background: var(--accent2); }
+    .timer-number {
+      font-family: 'DM Mono', monospace;
+      font-size: 26px;
+      font-weight: 500;
+      color: var(--text);
+      min-width: 40px;
+      text-align: right;
+    }
+    .timer-number.low { color: var(--accent2); }
+
+    /* ── Vote options (single column, letter badges via CSS counter) ──── */
+    .vote-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 14px;
+      counter-reset: voteopt;
+    }
+    .vote-btn {
+      position: relative;
+      counter-increment: voteopt;
+      background: var(--surface2);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 13px 16px 13px 56px;
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+      text-align: left;
+      cursor: pointer;
+      transition: all 0.18s;
+    }
+    .vote-btn::before {
+      content: counter(voteopt, upper-alpha);
+      position: absolute;
+      left: 11px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.18s;
+    }
+    .vote-btn:hover:not(:disabled) {
+      border-color: rgba(124,109,250,0.4);
+      background: rgba(124,109,250,0.05);
+    }
+    .vote-btn.selected {
+      border-color: var(--accent);
+      background: rgba(124,109,250,0.11);
+    }
+    .vote-btn.selected::before {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .vote-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .vote-btn.selected:disabled { opacity: 1; }
+
+    #voted-msg {
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      color: var(--accent3);
+      text-align: center;
+      margin-top: 16px;
+    }
+
+    /* ── Reveal screen ────────────────────────────────────────────────── */
+    .reveal-answer-card {
+      background: linear-gradient(135deg, rgba(124,109,250,0.1), rgba(250,109,154,0.07));
+      border: 1.5px solid rgba(124,109,250,0.22);
+      border-radius: var(--radius);
+      padding: 24px 22px;
+      text-align: center;
+      margin: 16px 0 22px;
+    }
+    .reveal-answer-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+    .reveal-answer-text {
+      font-size: 19px;
+      font-weight: 700;
+      font-style: italic;
+      color: var(--text);
+      margin-bottom: 16px;
+      letter-spacing: -0.01em;
+    }
+    .reveal-attribution {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .reveal-attribution .name {
+      color: var(--accent2);
+      font-family: 'Bricolage Grotesque', sans-serif;
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      text-transform: none;
+      margin-left: 6px;
+    }
+
+    .reveal-section { margin-bottom: 14px; }
+    .reveal-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .reveal-label.correct { color: var(--accent3); }
+    .reveal-label.wrong   { color: var(--muted); }
+    .reveal-label.novote  { color: var(--muted); }
+
+    .reveal-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .reveal-chip {
+      padding: 6px 12px;
+      border-radius: 100px;
+      font-size: 13px;
+      font-weight: 500;
+      border: 1px solid var(--border);
+    }
+    .reveal-chip.correct {
+      background: rgba(109,250,188,0.1);
+      color: var(--accent3);
+      border-color: rgba(109,250,188,0.25);
+    }
+    .reveal-chip.wrong {
+      background: var(--surface2);
+      color: var(--muted);
+    }
+    .reveal-chip.novote {
+      background: transparent;
+      color: var(--muted);
+      font-style: italic;
+      border-style: dashed;
+    }
+
+    /* ── Reveal countdown ─────────────────────────────────────────────── */
+    .reveal-countdown-wrap {
+      text-align: center;
+      margin: 22px 0 12px;
+      padding: 18px 20px;
+      background: var(--surface2);
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+    }
+    .reveal-timer {
+      font-family: 'DM Mono', monospace;
+      font-size: 40px;
+      font-weight: 500;
+      color: var(--accent2);
+      line-height: 1;
+      margin-bottom: 6px;
+    }
+    .reveal-timer-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .reveal-timer-label::before {
+      content: '';
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--accent2);
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    .paused-msg {
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--host);
+      margin-bottom: 10px;
+    }
+
+    /* ── Between rounds ───────────────────────────────────────────────── */
+    .between-rounds {
+      text-align: center;
+      padding: 50px 24px;
+    }
+    .ready-text {
+      font-size: 18px;
+      font-weight: 500;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+    .big-countdown {
+      font-family: 'DM Mono', monospace;
+      font-size: 80px;
+      font-weight: 500;
+      color: var(--accent);
+      line-height: 1;
+      margin: 16px 0 24px;
+    }
+
+    /* ── Leaderboard ──────────────────────────────────────────────────── */
+    .leaderboard-header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .trophy {
+      font-size: 56px;
+      line-height: 1;
+      margin-bottom: 14px;
+    }
+    .leaderboard-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .lb-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 13px 16px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+    }
+    .lb-rank {
+      font-family: 'DM Mono', monospace;
+      font-size: 18px;
+      font-weight: 500;
+      color: var(--muted);
+      width: 28px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+    .leaderboard-list .lb-row:nth-of-type(1) .lb-rank,
+    .lb-rank.first {
+      color: #fbbf24;
+      font-size: 22px;
+    }
+    .leaderboard-list .lb-row:nth-of-type(2) .lb-rank:not(.first) { color: #94a3b8; }
+    .leaderboard-list .lb-row:nth-of-type(3) .lb-rank:not(.first) { color: #cd7c3f; }
+
+    /* coloured avatar before name on leaderboard */
+    .lb-name {
+      flex: 1;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      position: relative;
+      padding-left: 42px;
+    }
+    .lb-name::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 50%;
+      transform: translateY(-50%);
+      width: 32px; height: 32px;
+      border-radius: 10px;
+      background: rgba(124,109,250,0.18);
+    }
+    .leaderboard-list .lb-row:nth-child(4n+1) .lb-name::before { background: rgba(124,109,250,0.18); }
+    .leaderboard-list .lb-row:nth-child(4n+2) .lb-name::before { background: rgba(250,109,154,0.18); }
+    .leaderboard-list .lb-row:nth-child(4n+3) .lb-name::before { background: rgba(109,250,188,0.18); }
+    .leaderboard-list .lb-row:nth-child(4n+4) .lb-name::before { background: rgba(250,159,109,0.18); }
+
+    .lb-score {
+      font-family: 'DM Mono', monospace;
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--accent);
+    }
+    .lb-pts {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 400;
+      letter-spacing: 0.05em;
+      margin-left: 4px;
+    }
+
+    /* ── Holding / latecomer screens ──────────────────────────────────── */
+    .holding-screen {
+      text-align: center;
+      padding: 50px 28px;
+    }
+    .holding-screen .emoji { font-size: 52px; margin-bottom: 18px; line-height: 1; }
+    .holding-screen h2 { margin-bottom: 10px; }
+    .holding-screen p { font-size: 14px; }
+    .waiting-count {
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      color: var(--accent);
+      margin-top: 14px;
+      font-weight: 500;
+    }
+    .waiting-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 18px;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .waiting-pulse {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--accent2);
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    .waiting-pulse.host-color { background: var(--host); }
+
+    /* ── Confirm bar ──────────────────────────────────────────────────── */
+    .confirm-bar {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      background: rgba(250,80,80,0.05);
+      border: 1.5px solid rgba(250,80,80,0.18);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      margin-top: 10px;
+    }
+    .confirm-bar.visible { display: flex; }
+    .confirm-bar span { flex: 1; font-size: 14px; color: var(--text); font-weight: 500; }
+
+    /* ── Host controls (action row) ───────────────────────────────────── */
+    .host-controls {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+
+    /* ── Host disconnect banner (fixed) ───────────────────────────────── */
+    .host-banner {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 1000;
+      background: var(--host);
+      color: #0e0e10;
+      text-align: center;
+      padding: 11px 16px;
+      font-family: inherit;
+      font-weight: 600;
+      font-size: 14px;
+      letter-spacing: -0.01em;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.35);
+    }
+    .host-banner::before {
+      content: '';
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      margin-right: 10px;
+      vertical-align: middle;
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+
+    /* ── Mobile ───────────────────────────────────────────────────────── */
+    @media (max-width: 480px) {
+      .card { padding: 22px 18px; }
+      h1 { font-size: 30px; }
+      .wordmark-logo { width: 38px; height: 38px; }
+      .wordmark-text { font-size: 20px; }
+      .role-row { grid-template-columns: 1fr; }
+      .vote-btn { padding-left: 52px; }
+      .vote-btn::before { width: 28px; height: 28px; left: 10px; }
+      .reveal-timer { font-size: 32px; }
+      .big-countdown { font-size: 64px; }
+    }
+  </style>
 </head>
 <body>
+
+<!-- Persistent banner shown when host has disconnected (also reused by JS as a toast) -->
+<div id="host-disconnect-banner" class="host-banner" style="display:none;">Host disconnected — reassigning…</div>
+
 <div id="app">
 
-  <!-- HOLDING screen (session locked for new visitors) -->
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+  <!-- HOLDING screen (Screen 10 — session locked / latecomer)             -->
+  <!-- ─────────────────────────────────────────────────────────────────── -->
   <div id="screen-holding" class="screen">
     <div class="card holding-screen">
-      <div class="emoji">☕</div>
+      <div class="emoji">🔒</div>
       <h2>A session is in progress</h2>
-      <p>The game is already underway. Grab a coffee and try again in a few minutes — the session resets automatically after the leaderboard is shown.</p>
+      <p>The game is already underway. The session resets automatically once the leaderboard ends.</p>
+      <div class="waiting-indicator">
+        <span class="waiting-pulse"></span>
+        Waiting for session to end…
+      </div>
     </div>
   </div>
 
-  <!-- PLAYER WAITING screen (waiting for host to confirm question) -->
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+  <!-- PLAYER WAITING screen (Screen 11 — waiting for host)                -->
+  <!-- ─────────────────────────────────────────────────────────────────── -->
   <div id="screen-player-waiting" class="screen">
     <div class="card holding-screen">
+      <div class="role-tag players" style="margin-bottom:18px;">Players</div>
       <div class="emoji">🎙️</div>
       <h2>Getting things ready…</h2>
       <p>The Host is setting up the session — we'll be with you in a moment!</p>
       <p id="player-waiting-count" class="waiting-count"></p>
+      <div class="waiting-indicator">
+        <span class="waiting-pulse"></span>
+        Waiting for the Host…
+      </div>
     </div>
   </div>
 
-  <!-- REGISTRATION screen -->
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+  <!-- REGISTRATION screen (Screen 1 — landing / role selection)           -->
+  <!-- ─────────────────────────────────────────────────────────────────── -->
   <div id="screen-registration" class="screen">
     <div class="card">
-      <h1>Weekend Catchup</h1>
-      <p class="subtitle">Monday's friendliest game — share your weekend and guess everyone else's!</p>
+      <div class="wordmark">
+        <div class="wordmark-logo">💬</div>
+        <span class="wordmark-text">Team Catchup</span>
+      </div>
+
+      <div class="eyebrow">Pick your role</div>
+      <h1>Quick team <span class="accent">icebreaker.</span></h1>
+      <p class="subtitle">Answer the Host's question, then guess who said what. Friendly. Anonymous. Quick.</p>
+
       <input type="text" id="input-name" placeholder="Your name…" maxlength="30" autocomplete="off" />
+
       <div class="role-row">
         <button class="role-btn" id="btn-role-host" onclick="selectRole('host')">
           <span class="role-icon">🎙️</span>
@@ -46,142 +970,223 @@
           <span class="role-note">Join and play</span>
         </button>
       </div>
+
       <button class="btn btn-primary btn-full" onclick="joinSession()">Join</button>
+      <div class="role-note-below" style="margin-top:14px;">Only one Host per session. First to tap gets it.</div>
     </div>
+
     <div id="waiting-players-card" class="card" style="display:none">
-      <h3>Who's here</h3>
+      <div class="section-label">Who's here</div>
       <ul class="player-list" id="reg-player-list"></ul>
     </div>
   </div>
 
-  <!-- QUESTION SETTING screen (host only) -->
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+  <!-- QUESTION SETTING (Screen 3 — host only)                             -->
+  <!-- ─────────────────────────────────────────────────────────────────── -->
   <div id="screen-question-setting" class="screen">
     <div class="card">
-      <h1>Set the Question</h1>
-      <p class="subtitle">This is what everyone will answer. Edit it or leave it as the default.</p>
-      <input type="text" id="input-question" maxlength="140" autocomplete="off" />
-      <button class="btn btn-primary btn-full" onclick="confirmQuestion()">Confirm Question →</button>
+      <div class="role-tag host-only">Host only</div>
+      <h2>Set the question</h2>
+      <p class="subtitle">Pick a suggestion or write your own. Everyone will answer this.</p>
+
+      <div class="question-suggestions" id="question-suggestions">
+        <button class="suggestion-chip" onclick="useSuggestion(this)">What did you get up to this weekend?</button>
+        <button class="suggestion-chip" onclick="useSuggestion(this)">What are your holiday plans?</button>
+        <button class="suggestion-chip" onclick="useSuggestion(this)">What's your hidden talent?</button>
+        <button class="suggestion-chip" onclick="useSuggestion(this)">What's your most unpopular opinion?</button>
+        <button class="suggestion-chip" onclick="useSuggestion(this)">What's one thing on your bucket list?</button>
+        <button class="suggestion-chip" onclick="useSuggestion(this)">What's your go-to comfort food?</button>
+        <button class="suggestion-chip" onclick="useSuggestion(this)">What's a fun fact about you most people don't know?</button>
+        <button class="suggestion-chip" onclick="useSuggestion(this)">When is your birthday and how do you like to celebrate?</button>
+      </div>
+
+      <input type="text" id="input-question" placeholder="Type your question here…" maxlength="140" autocomplete="off" />
+      <button class="btn btn-host btn-full" onclick="confirmQuestion()">Confirm question →</button>
     </div>
   </div>
 
-  <!-- SUBMISSION screen -->
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+  <!-- SUBMISSION (Screen 6 + Host Lobby 4)                                -->
+  <!-- ─────────────────────────────────────────────────────────────────── -->
   <div id="screen-submission" class="screen">
+    <!-- Submit your answer card -->
     <div class="card" id="sub-form-card">
-      <h2 id="sub-question-text">What did you get up to this weekend?</h2>
-      <p>Be specific enough to be guessable — but not too obvious! 😄</p>
-      <input type="text" id="input-activity" placeholder="e.g. Tried making sourdough for the first time…" maxlength="140" autocomplete="off" />
-      <button class="btn btn-primary btn-full" onclick="submitActivity()">Submit</button>
+      <div class="role-tag everyone">Everyone</div>
+      <div class="info-notice">🎯 Your answer is anonymous until the reveal.</div>
+      <div class="question-text" id="sub-question-text">Your question</div>
+      <p style="margin-bottom:14px;">Be specific enough to be guessable — but not too obvious! 😄</p>
+      <input type="text" id="input-activity" placeholder="Type your answer here…" maxlength="140" autocomplete="off" />
+      <button class="btn btn-primary btn-full" onclick="submitActivity()">Submit answer</button>
     </div>
+
+    <!-- After-submit waiting card -->
     <div class="card" id="sub-wait-card" style="display:none">
-      <h2>Submitted! ✅</h2>
+      <div class="role-tag everyone">Everyone</div>
+      <div class="info-notice success">✓ Submitted! Hang tight — your answer is locked in.</div>
+      <h2>Nicely done</h2>
       <p id="sub-wait-msg">Waiting for everyone else…</p>
     </div>
-    <!-- Host status panel -->
+
+    <!-- Host lobby panel -->
     <div class="card" id="host-sub-panel" style="display:none">
-      <div>
-        <h3>Ready ✅</h3>
-        <ul class="player-list" id="host-ready-list"></ul>
+      <div class="header-row">
+        <div class="role-tag host-only" style="margin-bottom:0;">Host only</div>
+        <span class="youre-host">You're Host</span>
       </div>
+      <h2>Lobby</h2>
+      <div class="confirmed-question" id="host-lobby-question"></div>
+
+      <div class="section-label submitted">
+        <span>Submitted</span>
+        <span class="count" id="host-ready-count"></span>
+      </div>
+      <ul class="player-list" id="host-ready-list"></ul>
+
       <div class="divider"></div>
-      <div>
-        <h3>Not yet submitted ⏳</h3>
-        <ul class="player-list" id="host-waiting-list"></ul>
+
+      <div class="section-label">
+        <span>Not yet submitted</span>
+        <span class="count" id="host-waiting-count"></span>
       </div>
-      <div class="mt-16">
-        <button class="btn btn-teal btn-full" onclick="startGame()">Start Game →</button>
+      <ul class="player-list" id="host-waiting-list"></ul>
+
+      <div class="host-controls-area">
+        <div class="host-controls-label">Host Controls</div>
+        <button class="btn btn-host btn-full" onclick="startGame()">Start game →</button>
       </div>
     </div>
   </div>
 
-  <!-- VOTING screen -->
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+  <!-- VOTING (Screen 7)                                                   -->
+  <!-- ─────────────────────────────────────────────────────────────────── -->
   <div id="screen-voting" class="screen">
     <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <div class="role-tag everyone">Everyone</div>
+      <div class="vote-meta-row">
         <span class="counter-badge" id="round-counter">Round 1 of 1</span>
         <span class="counter-badge" id="vote-counter">0 of 0 voted</span>
       </div>
-      <h2 style="margin-bottom:4px;">Whose weekend was this?</h2>
-      <p class="mb-8">Pick who you think did this:</p>
+      <div class="question-context" id="vote-question-context"></div>
+      <h2 style="margin-bottom:4px;">Whose answer was this?</h2>
+      <p style="margin-bottom:14px;font-size:13px;">Pick who you think wrote this:</p>
+
       <div class="activity-box" id="vote-activity-text"></div>
+
       <div class="timer-wrap">
         <div class="timer-bar-bg"><div class="timer-bar" id="timer-bar"></div></div>
-        <div class="timer-number" id="timer-number">45</div>
+        <div class="timer-number mono" id="timer-number">45</div>
       </div>
+
       <div class="vote-grid" id="vote-grid"></div>
-      <div id="voted-msg" style="display:none;margin-top:16px;text-align:center;color:var(--accent2);font-weight:600;">Vote recorded! Waiting for others…</div>
+
+      <div id="voted-msg" style="display:none;">✓ Vote locked in — waiting for others…</div>
+
       <div id="vote-host-controls" class="host-controls" style="display:none">
-        <button class="btn btn-secondary btn-sm" onclick="hostNext()">Next →</button>
-        <button class="btn btn-danger btn-sm" onclick="endGamePrompt('vote')">End Game</button>
+        <button class="btn btn-ghost btn-sm" onclick="hostNext()">Next round →</button>
+        <button class="btn btn-danger btn-sm" onclick="endGamePrompt('vote')">End game</button>
       </div>
+
       <div class="confirm-bar" id="end-confirm-bar-vote">
         <span>End game for everyone?</span>
         <button class="btn btn-danger btn-sm" onclick="confirmEndGame()">Confirm</button>
-        <button class="btn btn-secondary btn-sm" onclick="cancelEndGame('vote')">Cancel</button>
+        <button class="btn btn-ghost btn-sm" onclick="cancelEndGame('vote')">Cancel</button>
       </div>
     </div>
   </div>
 
-  <!-- REVEAL screen -->
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+  <!-- REVEAL (Screen 8)                                                   -->
+  <!-- ─────────────────────────────────────────────────────────────────── -->
   <div id="screen-reveal" class="screen">
     <div class="card">
-      <span class="counter-badge" id="reveal-round-label">Round 1 of 1</span>
-      <h2 class="mt-8">It was…</h2>
-      <div class="activity-box" id="reveal-activity-text"></div>
-      <div style="text-align:center;margin-bottom:20px;">
-        <span style="font-size:1.5rem;font-weight:700;color:var(--accent);" id="reveal-owner-name"></span>
+      <div class="role-tag everyone">Everyone</div>
+      <div class="vote-meta-row">
+        <span class="counter-badge" id="reveal-round-label">Round 1 of 1</span>
       </div>
+      <div class="question-context" id="reveal-question-context"></div>
+
+      <div class="reveal-answer-card">
+        <div class="reveal-answer-label">The answer was…</div>
+        <div class="reveal-answer-text" id="reveal-activity-text"></div>
+        <div class="reveal-attribution">
+          By <span class="name" id="reveal-owner-name"></span>
+        </div>
+      </div>
+
       <div class="reveal-section">
-        <div class="reveal-label correct">✅ Correct (+1 pt)</div>
+        <div class="reveal-label correct">✓ Correct (+1 pt)</div>
         <div class="reveal-list" id="reveal-correct"></div>
       </div>
       <div class="reveal-section">
-        <div class="reveal-label wrong">❌ Wrong</div>
+        <div class="reveal-label wrong">✗ Wrong</div>
         <div class="reveal-list" id="reveal-wrong"></div>
       </div>
       <div class="reveal-section">
         <div class="reveal-label novote">— Did not vote</div>
         <div class="reveal-list" id="reveal-novote"></div>
       </div>
-      <!-- Shared countdown (all clients see this) -->
+
       <div class="reveal-countdown-wrap">
         <div id="reveal-paused-msg" class="paused-msg" style="display:none;">Host has paused ⏸</div>
         <div id="reveal-timer-number" class="reveal-timer">15</div>
         <div class="reveal-timer-label">seconds until next round</div>
       </div>
-      <!-- Host-only controls -->
+
       <div id="reveal-host-controls" class="host-controls" style="display:none">
-        <button class="btn btn-secondary btn-sm" id="btn-pause-reveal" onclick="pauseReveal()">Pause ⏸</button>
-        <button class="btn btn-secondary btn-sm" id="btn-resume-reveal" onclick="resumeReveal()" style="display:none">Resume ▶</button>
-        <button class="btn btn-secondary btn-sm" onclick="skipReveal()">Skip →</button>
-        <button class="btn btn-danger btn-sm" onclick="endGamePrompt('reveal')">End Game</button>
+        <button class="btn btn-ghost btn-sm" id="btn-pause-reveal" onclick="pauseReveal()">Pause ⏸</button>
+        <button class="btn btn-ghost btn-sm" id="btn-resume-reveal" onclick="resumeReveal()" style="display:none">Resume ▶</button>
+        <button class="btn btn-ghost btn-sm" onclick="skipReveal()">Skip →</button>
+        <button class="btn btn-danger btn-sm" onclick="endGamePrompt('reveal')">End game</button>
       </div>
+
       <div class="confirm-bar" id="end-confirm-bar-reveal">
         <span>End game for everyone?</span>
         <button class="btn btn-danger btn-sm" onclick="confirmEndGame()">Confirm</button>
-        <button class="btn btn-secondary btn-sm" onclick="cancelEndGame('reveal')">Cancel</button>
+        <button class="btn btn-ghost btn-sm" onclick="cancelEndGame('reveal')">Cancel</button>
       </div>
     </div>
   </div>
 
-  <!-- BETWEEN ROUNDS screen -->
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+  <!-- BETWEEN ROUNDS                                                       -->
+  <!-- ─────────────────────────────────────────────────────────────────── -->
   <div id="screen-between" class="screen">
     <div class="card between-rounds">
       <div class="ready-text">Are you ready for the next one?</div>
       <div class="big-countdown" id="between-countdown">3</div>
-      <div id="between-host-controls" style="display:none;margin-top:16px;">
-        <button class="btn btn-secondary btn-sm" onclick="skipCountdown()">Skip →</button>
+      <div class="waiting-indicator"><span class="waiting-pulse"></span>Get set…</div>
+      <div id="between-host-controls" style="display:none;margin-top:20px;">
+        <button class="btn btn-ghost btn-sm" onclick="skipCountdown()">Skip →</button>
       </div>
     </div>
   </div>
 
-  <!-- LEADERBOARD screen -->
+  <!-- ─────────────────────────────────────────────────────────────────── -->
+  <!-- LEADERBOARD (Screen 9)                                              -->
+  <!-- ─────────────────────────────────────────────────────────────────── -->
   <div id="screen-leaderboard" class="screen">
     <div class="card">
-      <h1 style="margin-bottom:4px;">Final Scores 🏆</h1>
-      <p class="subtitle" id="lb-subtitle">Here's how everyone did!</p>
+      <div class="leaderboard-header">
+        <div class="trophy">🏆</div>
+        <h1 style="font-size:30px;margin-bottom:6px;">Final scores</h1>
+        <p class="subtitle" id="lb-subtitle" style="font-style:italic;margin-bottom:0;">Here's how everyone did!</p>
+      </div>
+
       <div class="leaderboard-list" id="leaderboard-list"></div>
+
+      <div id="leaderboard-host-controls" class="host-controls-area" style="display:none;margin-top:22px;">
+        <div class="host-controls-label">Host Controls</div>
+        <button class="btn btn-ghost btn-full" onclick="hostResetPrompt()">Reset session</button>
+        <div class="confirm-bar" id="reset-confirm-bar">
+          <span>Reset session for everyone?</span>
+          <button class="btn btn-danger btn-sm" onclick="confirmHostReset()">Confirm reset</button>
+          <button class="btn btn-ghost btn-sm" onclick="cancelHostReset()">Cancel</button>
+        </div>
+      </div>
     </div>
-    <p style="text-align:center;color:var(--text-muted);font-size:0.85rem;margin-top:12px;">The session resets automatically in 60 seconds.</p>
+    <div class="info-notice" style="text-align:center;">The session resets automatically in 60 seconds.</div>
   </div>
 
 </div>
