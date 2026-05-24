@@ -5,12 +5,16 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+// Explicitly accept both transports. WebSocket is preferred; HTTP long-polling
+// is available as a fallback for clients on restricted networks that block WS.
+const io = new Server(server, {
+  transports: ['websocket', 'polling'],
+});
 const PORT = process.env.PORT || 3000;
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-const HOST_DISCONNECT_GRACE_MS = 30 * 1000;
+const HOST_DISCONNECT_GRACE_MS = 4 * 60 * 1000; // 4 minutes
 const IDLE_PREGAME_MS  = 15 * 60 * 1000;
 const IDLE_INGAME_MS   = 30 * 60 * 1000;
 
@@ -94,7 +98,18 @@ function allVoted() {
   return tokens.every(t => state.votedThisRound.has(t));
 }
 
+// Emit only to sockets that have completed registration (are in state.players).
+// Used for all game-phase events — keeps spectators / unregistered visitors
+// off voting, reveal, leaderboard, etc.
+function emitToRegistered(event, payload) {
+  Object.keys(state.players).forEach(sid => {
+    io.to(sid).emit(event, payload);
+  });
+}
+
 function broadcastLobby() {
+  // lobby_update intentionally goes to everyone — unregistered visitors
+  // on the registration screen need to see host-claimed status update.
   io.emit('lobby_update', {
     players: getPublicPlayers(),
     hostTaken: !!state.hostSocketId,
@@ -105,7 +120,7 @@ function broadcastLobby() {
 
 function broadcastSubmissionStatus() {
   const players = getPublicPlayers();
-  io.emit('submission_update', {
+  emitToRegistered('submission_update', {
     players,
     submitted: players.filter(p => p.submitted),
     waiting:   players.filter(p => !p.submitted),
@@ -147,7 +162,7 @@ function startVotingRound() {
   state.phase = 'voting';
   resetIdleTimer();
 
-  io.emit('voting_round', {
+  emitToRegistered('voting_round', {
     roundIndex: state.currentRound,
     totalRounds: state.activities.length,
     activityText: act.text,
@@ -198,7 +213,7 @@ function advanceFromVoting() {
     revealTimerEnd: state.revealTimerEnd,
   };
   state.lastRevealPayload = payload;
-  io.emit('reveal', payload);
+  emitToRegistered('reveal', payload);
   scheduleRevealAdvance(state.revealRemainingMs);
 }
 
@@ -216,7 +231,7 @@ function advanceFromReveal() {
   } else {
     state.phase = 'between';
     resetIdleTimer();
-    io.emit('between_rounds', { countdown: 3 });
+    emitToRegistered('between_rounds', { countdown: 3 });
     state.timerHandle = setTimeout(() => {
       state.currentRound++;
       startVotingRound();
@@ -239,7 +254,7 @@ function endGame() {
     ranked[i].rank = rank;
   }
 
-  io.emit('leaderboard', {
+  emitToRegistered('leaderboard', {
     ranked,
     noSubmissions: state.activities.length === 0,
     hostToken: state.players[state.hostSocketId]?.token || null,
@@ -250,7 +265,7 @@ function endGame() {
 // ── Host abandonment / promotion ─────────────────────────────────────────────
 function startHostDisconnectTimer() {
   if (state.hostDisconnectTimerHandle) clearTimeout(state.hostDisconnectTimerHandle);
-  io.emit('host_disconnecting', { gracePeriodMs: HOST_DISCONNECT_GRACE_MS });
+  emitToRegistered('host_disconnecting', { gracePeriodMs: HOST_DISCONNECT_GRACE_MS });
   state.hostDisconnectTimerHandle = setTimeout(() => {
     state.hostDisconnectTimerHandle = null;
     promoteNewHost();
@@ -261,14 +276,15 @@ function cancelHostDisconnectTimer() {
   if (state.hostDisconnectTimerHandle) {
     clearTimeout(state.hostDisconnectTimerHandle);
     state.hostDisconnectTimerHandle = null;
-    io.emit('host_reconnected');
+    emitToRegistered('host_reconnected');
   }
 }
 
 function promoteNewHost() {
-  // Pick first connected non-host player
+  // Pick the LONGEST-CONNECTED non-host player (smallest joinedAt).
   const candidates = Object.entries(state.players)
-    .filter(([sid, p]) => p.connected !== false && sid !== state.hostSocketId);
+    .filter(([sid, p]) => p.connected !== false && sid !== state.hostSocketId)
+    .sort(([, a], [, b]) => (a.joinedAt || 0) - (b.joinedAt || 0));
 
   if (candidates.length === 0) {
     const oldId = resetState();
@@ -276,7 +292,11 @@ function promoteNewHost() {
     return;
   }
 
-  // Clean up the old host entry (they didn't come back)
+  const oldHostName = (state.hostSocketId && state.players[state.hostSocketId])
+    ? state.players[state.hostSocketId].name
+    : null;
+
+  // Clean up the old host entry (they didn't come back within grace period)
   if (state.hostSocketId && state.players[state.hostSocketId]) {
     delete state.players[state.hostSocketId];
   }
@@ -286,7 +306,10 @@ function promoteNewHost() {
   state.hostSocketId = newHostSid;
 
   io.to(newHostSid).emit('promoted_to_host', buildReconnectPayload(newHostSid));
-  io.emit('host_changed', { newHostName: newPlayer.name });
+  emitToRegistered('host_changed', {
+    newHostName: newPlayer.name,
+    oldHostName,
+  });
   broadcastLobby();
   if (state.phase === 'submission' || state.phase === 'question-setting') {
     broadcastSubmissionStatus();
@@ -417,6 +440,7 @@ io.on('connection', (socket) => {
       score: 0,
       token: playerToken,
       connected: true,
+      joinedAt: Date.now(),
     };
 
     if (role === 'host') {
@@ -452,7 +476,9 @@ io.on('connection', (socket) => {
     state.phase = 'submission';
     resetIdleTimer();
 
-    io.emit('question_confirmed', {
+    // Only registered participants get the screen transition.
+    // Unregistered sockets on the registration screen stay put.
+    emitToRegistered('question_confirmed', {
       question: state.question,
       players: getPublicPlayers(),
     });
@@ -500,7 +526,7 @@ io.on('connection', (socket) => {
     state.votedThisRound.add(voter.token);
     resetIdleTimer();
 
-    io.emit('vote_update', {
+    emitToRegistered('vote_update', {
       votedCount: state.votedThisRound.size,
       total: connectedPlayerTokens().length,
     });
@@ -519,7 +545,7 @@ io.on('connection', (socket) => {
     if (state.timerHandle) clearTimeout(state.timerHandle);
     state.revealPaused = true;
     state.revealRemainingMs = Math.max(0, state.revealTimerEnd - Date.now());
-    io.emit('reveal_paused', { remainingMs: state.revealRemainingMs });
+    emitToRegistered('reveal_paused', { remainingMs: state.revealRemainingMs });
     // Idle timer keeps running — pause counts as "stuck in place"
   });
 
@@ -528,7 +554,7 @@ io.on('connection', (socket) => {
     state.revealPaused = false;
     state.revealTimerEnd = Date.now() + state.revealRemainingMs;
     resetIdleTimer();
-    io.emit('reveal_resumed', { revealTimerEnd: state.revealTimerEnd });
+    emitToRegistered('reveal_resumed', { revealTimerEnd: state.revealTimerEnd });
     scheduleRevealAdvance(state.revealRemainingMs);
   });
 

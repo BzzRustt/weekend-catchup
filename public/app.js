@@ -7,7 +7,11 @@ function clearSession()    { try { localStorage.removeItem(LS_KEY); } catch (_) 
 function generateToken()   { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 
 /* ── App state ───────────────────────────────────────────────────────────── */
-const socket = io();
+// Try WebSocket first; fall back to HTTP long-polling automatically if it fails.
+// Order of `transports` is the preference order.
+const socket = io({
+  transports: ['websocket', 'polling'],
+});
 
 let myRole = 'player';
 let myName = '';
@@ -23,6 +27,11 @@ let betweenInterval = null;
 
 let reconnecting = false;
 let pendingInitData = null;
+
+// Bug 1 gate — only sockets that have completed the Join flow (and been
+// acknowledged by the server) are "registered". Unregistered visitors stay
+// on the registration screen and ignore all game-state broadcasts.
+function isRegistered() { return !!myName; }
 
 /* ── Screen navigation ───────────────────────────────────────────────────── */
 function showScreen(id) {
@@ -43,7 +52,9 @@ function joinSession() {
   const nameEl = document.getElementById('input-name');
   const name = nameEl.value.trim();
   if (!name) { nameEl.focus(); return; }
-  myName = name;
+  // Do NOT set myName until the server acknowledges via the `joined` event.
+  // Setting it eagerly would falsely flag this socket as "registered" even
+  // if the join is rejected (e.g. session locked, host already taken).
   socket.emit('join', { name, role: myRole, token: generateToken() });
 }
 
@@ -419,18 +430,21 @@ socket.on('session_reset', ({ oldSessionId }) => {
 
 /* ── Host disconnect / promotion ─────────────────────────────────────────── */
 socket.on('host_disconnecting', () => {
+  if (!isRegistered()) return;
   showHostDisconnectBanner();
 });
 
 socket.on('host_reconnected', () => {
+  if (!isRegistered()) return;
   hideHostDisconnectBanner();
 });
 
 socket.on('host_changed', ({ newHostName }) => {
+  if (!isRegistered()) return;
   hideHostDisconnectBanner();
-  // Light, non-blocking toast via banner re-use
+  // Non-blocking toast via banner re-use
   const banner = document.getElementById('host-disconnect-banner');
-  banner.textContent = `${newHostName} is now the Host`;
+  banner.textContent = `The Host has disconnected — ${newHostName} is now the Host.`;
   banner.style.background = 'var(--accent2)';
   banner.style.color = '#1a2e35';
   banner.style.display = 'block';
@@ -439,7 +453,7 @@ socket.on('host_changed', ({ newHostName }) => {
     banner.textContent = 'Host disconnected — reassigning…';
     banner.style.background = '';
     banner.style.color = '';
-  }, 3500);
+  }, 5500);
 });
 
 socket.on('promoted_to_host', (data) => {
@@ -491,6 +505,7 @@ socket.on('lobby_update', ({ players, hostTaken: ht, phase }) => {
 
 /* ── Socket: question confirmed ──────────────────────────────────────────── */
 socket.on('question_confirmed', ({ question }) => {
+  if (!isRegistered()) return; // Bug 3 gate — unregistered stay on registration screen
   confirmedQuestion = question;
   sessionPhase = 'submission';
   showSubmissionScreen(false);
@@ -498,6 +513,7 @@ socket.on('question_confirmed', ({ question }) => {
 
 /* ── Socket: submission update ───────────────────────────────────────────── */
 socket.on('submission_update', ({ players, submitted, waiting }) => {
+  if (!isRegistered()) return;
   if (sessionPhase !== 'submission') return;
   if (isHost) {
     renderHostSubPanel(submitted, waiting);
@@ -509,17 +525,20 @@ socket.on('submission_update', ({ players, submitted, waiting }) => {
 
 /* ── Socket: voting ──────────────────────────────────────────────────────── */
 socket.on('voting_round', (data) => {
+  if (!isRegistered()) return;
   hasVoted = false;
   if (data.question) confirmedQuestion = data.question;
   showVotingScreen({ ...data, votedCount: 0 });
 });
 
 socket.on('vote_update', ({ votedCount, total }) => {
+  if (!isRegistered()) return;
   document.getElementById('vote-counter').textContent = `${votedCount} of ${total} voted`;
 });
 
 /* ── Socket: reveal ──────────────────────────────────────────────────────── */
 socket.on('reveal', (data) => {
+  if (!isRegistered()) return;
   if (data.question) confirmedQuestion = data.question;
   showRevealScreen(data);
   startRevealTimer(data.revealTimerEnd);
@@ -527,6 +546,7 @@ socket.on('reveal', (data) => {
 });
 
 socket.on('reveal_paused', ({ remainingMs }) => {
+  if (!isRegistered()) return;
   setRevealPausedState(true, remainingMs);
   if (isHost) {
     document.getElementById('btn-pause-reveal').style.display  = 'none';
@@ -535,12 +555,14 @@ socket.on('reveal_paused', ({ remainingMs }) => {
 });
 
 socket.on('reveal_resumed', ({ revealTimerEnd }) => {
+  if (!isRegistered()) return;
   startRevealTimer(revealTimerEnd);
   if (isHost) resetRevealHostButtons();
 });
 
 /* ── Socket: between rounds ──────────────────────────────────────────────── */
 socket.on('between_rounds', () => {
+  if (!isRegistered()) return;
   clearInterval(revealTimerInterval);
   showScreen('between');
   document.getElementById('between-host-controls').style.display = isHost ? 'block' : 'none';
@@ -549,6 +571,7 @@ socket.on('between_rounds', () => {
 
 /* ── Socket: leaderboard ─────────────────────────────────────────────────── */
 socket.on('leaderboard', ({ ranked, noSubmissions }) => {
+  if (!isRegistered()) return;
   sessionPhase = 'leaderboard';
   clearInterval(timerInterval);
   clearInterval(revealTimerInterval);
